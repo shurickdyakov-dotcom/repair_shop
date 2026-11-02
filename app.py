@@ -92,7 +92,6 @@ def generate_document(order, type_doc):
         title = "Гарантийный талон"
         bottom_text = ""
     else:
-        # КВИТАНЦИЯ (ПРИЕМКА)
         title = "Квитанция о приеме устройства в ремонт"
         bottom_text = f"""
         <div style="margin-top: 15px; font-size: 10px; line-height: 1.3;">
@@ -164,7 +163,6 @@ def generate_document(order, type_doc):
     """
     
     if type_doc == "receipt":
-        # Для квитанции рисуем блок с состоянием
         html += f"""
         <div style="border: 1px solid #000; padding: 8px; margin-bottom: 10px;">
             <div style="margin-bottom: 3px;"><b>Заявленная неисправность:</b> {order['issue']}</div>
@@ -207,7 +205,6 @@ def generate_document(order, type_doc):
             <script>window.print();</script>
         </body></html>"""
     else:
-        # Для квитанции подписи чуть выше
         html += f"""
             <div class="signatures">
                 <div>Устройство принял: <span class="sig-line"></span> / {IP_UNP.replace('ИП ', '')} /</div>
@@ -343,9 +340,8 @@ elif menu == "Заказы":
                     st.write(f"**Стоимость:** {o_det['price']} руб. (Предоплата: {o_det['prepayment']})")
                     st.write(f"**Мастер:** {o_det['master']}")
                     
-                    # --- Кнопки связи с клиентом (СМС/Мессенджер) ---
                     sms_text = f"Здравствуйте, {o_det['client'].split()[1]}! Ваш {o_det['device']} готов. Сумма к оплате: {o_det['price']} BYN. Ждем вас в {IP_NAME}!"
-                    st.code(sms_text, language="text") # Выводим текст в окошке
+                    st.code(sms_text, language="text")
                     st.caption("👆 Скопируйте текст выше и вставьте в СМС или мессенджер.")
                 
                 st.markdown("---")
@@ -402,13 +398,11 @@ elif menu == "Заказы":
                     st.success("Сохранено!")
                     st.rerun()
                 
-                # Блок печати документов
                 o_dict = o_det.to_dict()
                 works_count = len([w for w in str(o_det.get('works_done', '')).split(';') if w.strip()])
                 o_dict['works_count'] = works_count if works_count > 0 else 1
 
-                # Квитанция печатается на этапе "Принят" или "В работе", Акт/Гарантия - при "Выдан"
-                if o_det['status'] in ["Принят", "В работе"] and (tab_statuses[i] is None or tab_statuses[i] == ["Принят"] or tab_statuses[i] == ["В работе"]):
+                if o_det['status'] in ["Принят", "В работе"] and (tab_statuses[i] is None or tab_statuses[i] in [["Принят"], ["В работе"]]):
                     st.markdown("### 🖨️ Документы (Приемка)")
                     if st.button("🖨️ Печать квитанции о приеме", key=f"pr_rec_{o_id}_{i}", use_container_width=True, type="primary"):
                         components.html(generate_document(o_dict, "receipt"), height=800, scrolling=True)
@@ -424,12 +418,55 @@ elif menu == "Заказы":
                         if st.button("Гарантийный талон", key=f"pw_{o_id}_{i}", use_container_width=True):
                             components.html(generate_document(o_dict, "warranty"), height=800, scrolling=True)
                     with cp3:
-                        if st.button("✂️ Печать комплекта (Акт + Гарантия)", key=f"pboth_{o_id}_{i}", use_container_width=True, type="primary"):
+                        if st.button("✂️ Печать комплекта", key=f"pboth_{o_id}_{i}", use_container_width=True, type="primary"):
                             html_act = generate_document(o_dict, "act")
                             html_warranty = generate_document(o_dict, "warranty")
-                            
                             html_act = html_act.replace("<script>window.print();</script>", "")
-                            
-                            cut_line = """
-                            <div style="text-align: center; margin: 20px 0; position: relative; page-break-inside: avoid;">
-                                <div style="border-top: 1px dashed #000; width: 100%; position: absolute; top: 50%; z-index
+                            cut_line = '<div style="text-align: center; margin: 20px 0; position: relative; page-break-inside: avoid;"><div style="border-top: 1px dashed #000; width: 100%; position: absolute; top: 50%; z-index: 1;"></div><span style="background: #fff; padding: 0 10px; position: relative; z-index: 2; font-size: 16px;">✂️</span></div>'
+                            combined_html = html_act.replace("</body></html>", cut_line + html_warranty)
+                            components.html(combined_html, height=1400, scrolling=True)
+                
+                st.markdown("---")
+                if st.button("❌ Удалить заказ", type="secondary", key=f"d_{o_id}_{i}", use_container_width=True):
+                    c.execute("DELETE FROM orders WHERE id = ?", (o_id,))
+                    conn.commit()
+                    st.success("Удалено")
+                    st.rerun()
+
+# --- КЛИЕНТЫ ---
+elif menu == "Клиенты":
+    st.subheader("Клиенты")
+    df_c = pd.read_sql_query("SELECT * FROM clients", conn)
+    if df_c.empty: st.info("Нет клиентов")
+    else:
+        display_clients = df_c.copy()
+        display_clients.insert(0, '№', range(1, len(display_clients) + 1))
+        display_clients = display_clients.rename(columns={'surname': 'Фамилия', 'name': 'Имя', 'phone': 'Тел', 'notes': 'Заметки'})
+        st.dataframe(display_clients[['№', 'Фамилия', 'Имя', 'Тел', 'Заметки']], use_container_width=True, hide_index=True)
+        
+        st.divider()
+        opts = {f"{r['surname']} {r['name']} ({r['phone']})": r['id'] for r in df_c.to_dict('records')}
+        sel = st.selectbox("Удалить клиента:", list(opts.keys()))
+        if st.button("Удалить", type="primary"):
+            if pd.read_sql_query(f"SELECT COUNT(*) as c FROM orders WHERE client_id={opts[sel]}", conn).iloc[0]['c'] > 0:
+                st.error("У клиента есть заказы!")
+            else:
+                c.execute("DELETE FROM clients WHERE id=?", (opts[sel],))
+                conn.commit()
+                st.success("Удален")
+                st.rerun()
+
+# --- СТАТИСТИКА ---
+elif menu == "Статистика":
+    st.subheader("Дашборд")
+    tot = pd.read_sql_query("SELECT COUNT(*) as c FROM orders", conn).iloc[0]['c']
+    rev = pd.read_sql_query("SELECT SUM(price) as s FROM orders WHERE status='Выдан'", conn).iloc[0]['s'] or 0
+    opn = pd.read_sql_query("SELECT COUNT(*) as c FROM orders WHERE status IN ('Принят','В работе','Готов')", conn).iloc[0]['c']
+    
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Всего заказов", tot)
+    c2.metric("Выручка", f"{rev:.2f} BYN")
+    c3.metric("В работе", opn)
+    
+    st.markdown("### Последние заказы")
+    st.dataframe(pd.read_sql_query("SELECT o.display_num as '№', c.surname || ' ' || c.name as 'Клиент', o.device as 'Устройство', o.status as 'Статус', o.price as 'Сумма' FROM orders o JOIN clients c ON o.client_id = c.id ORDER BY o.display_num DESC LIMIT 5", conn), use_container_width=True, hide_index=True)
