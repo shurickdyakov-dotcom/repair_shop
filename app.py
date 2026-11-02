@@ -422,9 +422,7 @@ elif menu == "Заказы":
                             html_act = generate_document(o_dict, "act")
                             html_warranty = generate_document(o_dict, "warranty")
                             html_act = html_act.replace("<script>window.print();</script>", "")
-                            cut_line = '<div style="text-align: center; margin: 20px 0; position: relative; page-break-inside: avoid;"><div style="border-top: 1px dashed #000; width: 100%; position: absolute; top: 50%; z-index: 1;"></div><span style="background: #fff; padding: 0 10px; position: relative; z-index: 2; font-size: 16px;">✂️</span></div>'
-                            combined_html = html_act.replace("</body></html>", cut_line + html_warranty)
-                            components.html(combined_html, height=1400, scrolling=True)
+                            cut_line = """<div style="text-align: center; margin: 20px 0; position: relative; page-break-inside: avoid;"><div style="border-top: 1px dashed #000; width: 100%; position: absolute; top: 50%; z-index: 1;"></div><span style="background: #fff; padding: 0 10px; position: relative; z-index: 2; font-size: 16px;">✂️</span></div>"""
                 
                 st.markdown("---")
                 if st.button("❌ Удалить заказ", type="secondary", key=f"d_{o_id}_{i}", use_container_width=True):
