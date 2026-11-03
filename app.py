@@ -43,6 +43,7 @@ conn.commit()
 c.execute("PRAGMA table_info(orders)")
 columns = [info[1] for info in c.fetchall()]
 if 'works_done' not in columns: c.execute("ALTER TABLE orders ADD COLUMN works_done TEXT DEFAULT ''")
+if 'brand' not in columns: c.execute("ALTER TABLE orders ADD COLUMN brand TEXT DEFAULT ''")
 if 'warranty' not in columns: c.execute("ALTER TABLE orders ADD COLUMN warranty TEXT DEFAULT ''")
 if 'completed_at' not in columns: c.execute("ALTER TABLE orders ADD COLUMN completed_at TEXT DEFAULT ''")
 if 'display_num' not in columns: 
@@ -99,7 +100,7 @@ def generate_document(order, type_doc):
             <b>Условия приема:</b><br>
             1. Срок диагностики и ремонта составляет до 30 дней.<br>
             2. Исполнитель не несет ответственности за сохранность данных на устройстве (клиенту рекомендуется сделать резервную копию).<br>
-            3. Неисправность, указанная в квитанции, является предварительной. Точная причина и стоимость ремонта определяются после диагностики.<br>
+            3. Неисправность со слов клиента, указанная в квитанции, является предварительной. Точная причина и стоимость ремонта определяются после диагностики.<br>
             4. Не забранные в течение 60 дней устройства могут быть реализованы в счет погашения долга за хранение.<br>
             5. Устройство сдается без вскрытия. Если устройство вскрывалось ранее, Исполнитель не несет гарантии по скрытым дефектам.<br><br>
             <b>С условиями приема ознакомлен и согласен. Претензий к внешнему виду и комплектации не имею.</b>
@@ -158,7 +159,7 @@ def generate_document(order, type_doc):
             <div class="info-right">
                 <div class="info-row"><span class="info-label">Заказчик:</span> {order['client']}</div>
                 <div class="info-row"><span class="info-label">Телефон:</span> {order['phone']}</div>
-                <div class="info-row"><span class="info-label">Марка/модель:</span> {order['device']}</div>
+                <div class="info-row"><span class="info-label">Марка/модель:</span> {order.get('brand', '')} {order['device']}</div>
             </div>
         </div>
     """
@@ -201,7 +202,7 @@ def generate_document(order, type_doc):
         html += f"""
             <div class="signatures">
                 <div>Исполнитель: <span class="sig-line"></span> / {IP_UNP.replace('ИП ', '')} /</div>
-                <div><span class="sig-line"></span> / {order['client'].split()[0]} /</div>
+                <div><span class="sig-line"></span> / Заказчик /</div>
             </div>
             <script>window.print();</script>
         </body></html>"""
@@ -209,7 +210,7 @@ def generate_document(order, type_doc):
         html += f"""
             <div class="signatures">
                 <div>Устройство принял: <span class="sig-line"></span> / {IP_UNP.replace('ИП ', '')} /</div>
-                <div>Устройство сдал: <span class="sig-line"></span> / {order['client'].split()[0]} /</div>
+                <div>Устройство сдал: <span class="sig-line"></span> / Заказчик /</div>
             </div>
             <script>window.print();</script>
         </body></html>"""
@@ -232,9 +233,9 @@ if menu == "Добавить заказ":
         clients = pd.read_sql_query("SELECT id, surname, name, phone FROM clients", conn)
         if clients.empty: st.warning("В базе нет клиентов. Переключитесь на 'Создать нового'.")
         else:
-            c_opts = clients.apply(lambda r: f"{r['surname']} {r['name']} ({r['phone']})", axis=1).tolist()
-            sel_c = st.selectbox("Выберите клиента", c_opts)
-            client_id = int(clients.iloc[c_opts.index(sel_c)]['id'])
+            c_opts = clients.apply(lambda r: f"{(str(r['surname']) + ' ') if pd.notna(r['surname']) and str(r['surname']).strip() else ''}{r['name']} ({r['phone']})", axis=1).tolist()
+        sel_c = st.selectbox("Выберите клиента", c_opts)
+        client_id = int(clients.iloc[c_opts.index(sel_c)]['id'])
     else:
         col_s, col_n = st.columns(2)
         with col_s: new_surname = st.text_input("Фамилия")
@@ -245,8 +246,10 @@ if menu == "Добавить заказ":
         with col2: new_phone_raw = st.text_input("Номер", placeholder="33 696 87 87", label_visibility="collapsed", key="new_c_phone")
 
     st.divider()
-    device = st.text_input("Модель телефона")
-    issue = st.text_area("Неисправность")
+    col_brand, col_model = st.columns(2)
+    with col_brand: brand = st.text_input("Марка (Xiaomi, iPhone, Samsung...)")
+    with col_model: device = st.text_input("Модель (Redmi Note 10, 13 Pro...)")
+    issue = st.text_area("Неисправность со слов клиента")
     
     c1, c2, c3, c4 = st.columns(4)
     k_case = c1.checkbox("Чехол"); k_sim = c2.checkbox("СИМ"); k_sd = c3.checkbox("Флешка"); k_other = c4.checkbox("Другое")
@@ -263,7 +266,7 @@ if menu == "Добавить заказ":
     
     if st.button("Создать заказ", type="primary"):
         if not device: st.error("Укажите модель телефона!")
-        elif client_mode == "Создать нового" and (not new_surname or not new_name or not new_phone_raw):
+        elif client_mode == "Создать нового" and (not new_name or not new_phone_raw):
             st.error("Заполните все данные нового клиента!")
         else:
             if client_mode == "Создать нового":
@@ -273,6 +276,11 @@ if menu == "Добавить заказ":
                 conn.commit()
                 client_id = c.lastrowid
             
+            # --- СЧИТАЕМ НОМЕР ЗАКАЗА ---
+            max_num = pd.read_sql_query("SELECT MAX(display_num) as m FROM orders", conn).iloc[0]['m']
+            new_display_num = 1 if pd.isna(max_num) else int(max_num) + 1
+            
+            # --- СОБИРАЕМ КОМПЛЕКТАЦИЮ И ВНЕШНИЙ ВИД ---
             kit_l = [x for x, y in [(("Чехол", k_case)), (("СИМ", k_sim)), (("Флешка", k_sd))] if y]
             if k_other and k_txt: kit_l.append(k_txt)
             kit_s = ", ".join(kit_l) if kit_l else "Нет"
@@ -280,12 +288,10 @@ if menu == "Добавить заказ":
             app_l = [x for x, y in [(("Царапины", a_scr)), (("Трещины", a_crk)), (("Вмятины", a_dnt)), (("Идеал", a_non))] if y]
             app_s = ", ".join(app_l) if app_l else "Не указан"
             
-            max_num = pd.read_sql_query("SELECT MAX(display_num) as m FROM orders", conn).iloc[0]['m']
-            new_display_num = 1 if pd.isna(max_num) else int(max_num) + 1
-            
+            # --- СОХРАНЯЕМ ЗАКАЗ ---
             now = datetime.now().isoformat()
-            c.execute("INSERT INTO orders (display_num, client_id, device, issue, kit, appearance, prepayment, payment_method, master, status, price, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                      (new_display_num, client_id, device, issue, kit_s, app_s, prepay, p_method, master, 'Принят', price, now, now))
+            c.execute("INSERT INTO orders (display_num, client_id, brand, device, issue, kit, appearance, prepayment, payment_method, master, status, price, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                      (new_display_num, client_id, brand, device, issue, kit_s, app_s, prepay, p_method, master, 'Принят', price, now, now))
             conn.commit()
             st.success(f"Заказ №{new_display_num} успешно создан!")
 
@@ -297,7 +303,7 @@ elif menu == "Заказы":
     df = pd.read_sql_query("SELECT o.*, c.surname, c.name, c.phone FROM orders o JOIN clients c ON o.client_id = c.id ORDER BY o.display_num ASC", conn)
     
     if not df.empty:
-        df['client'] = df['surname'] + ' ' + df['name']
+        df['client'] = df['surname'].fillna('').apply(lambda x: str(x) + ' ' if str(x).strip() else '') + df['name'].fillna('')
         df['date_short'] = pd.to_datetime(df['created_at']).dt.strftime('%d.%m.%Y %H:%M')
 
     tabs = st.tabs(["Все заказы", "Новые", "В работе", "Готовые", "Выданные"])
@@ -311,7 +317,14 @@ elif menu == "Заказы":
             
             if f_df.empty: st.info("Нет заказов с таким статусом"); continue
             
-            disp = f_df.rename(columns={'display_num': '№', 'status': 'Статус', 'date_short': 'Дата', 'client': 'Клиент', 'phone': 'Тел', 'device': 'Устройство', 'issue': 'Неисправность', 'price': 'Сумма'})
+             # Склеиваем марку и модель для таблицы
+            f_df['device_full'] = f_df['brand'].fillna('').apply(lambda x: str(x) + ' ' if str(x).strip() else '') + f_df['device'].fillna('')
+            
+            disp = f_df.rename(columns={'display_num': '№', 'status': 'Статус', 'date_short': 'Дата', 'client': 'Клиент', 'phone': 'Тел', 'device_full': 'Устройство', 'issue': 'Неисправность со слов клиента', 'price': 'Сумма'})
+            
+            # Форматируем сумму
+            disp['Сумма'] = disp['Сумма'].apply(lambda x: f"{x:.2f} BYN")
+
             def color_stat(val):
                 if val == 'Готов': return 'background-color: #10b981; color: white;'
                 if val == 'В работе': return 'background-color: #f59e0b; color: white;'
@@ -319,141 +332,208 @@ elif menu == "Заказы":
                 if val == 'Отменён': return 'background-color: #ef4444; color: white;'
                 return 'background-color: #3b82f6; color: white;'
             
-            st.dataframe(disp[['Статус', 'Дата', '№', 'Устройство', 'Клиент', 'Тел', 'Неисправность', 'Сумма']].style.map(color_stat, subset=['Статус']), use_container_width=True, hide_index=True)
+            # Красивая таблица с выравниванием
+            styled_df = disp[['Статус', 'Дата', '№', 'Устройство', 'Клиент', 'Тел', 'Неисправность со слов клиента', 'Сумма']].style.map(color_stat, subset=['Статус'])
             
-            opts = f_df.apply(lambda r: f"Заказ №{r['display_num']} | {r['client']} | {r['device']} ({r['status']})", axis=1).tolist()
+            # Центрируем номер и сумму, остальное по левому краю
+            styled_df = styled_df.set_properties(**{'text-align': 'left'})
+            styled_df = styled_df.set_properties(subset=['№', 'Сумма'], **{'text-align': 'center'})
+            styled_df = styled_df.set_properties(subset=['Статус'], **{'text-align': 'center', 'font-weight': 'bold'})
+            
+            f_df['price'] = f_df['price'].round(2)
+            disp['Сумма'] = disp['Сумма'].astype(str).str.replace(' BYN', '').apply(lambda x: f"{x} BYN")
+            st.dataframe(disp[['Статус', 'Дата', '№', 'Устройство', 'Клиент', 'Тел', 'Неисправность со слов клиента', 'Сумма']].style.map(color_stat, subset=['Статус']), use_container_width=True, hide_index=True)
+            
+            opts = f_df.apply(lambda r: f"Заказ №{r['display_num']} | {r['client']} | {(str(r['brand']) + ' ') if pd.notna(r['brand']) and str(r['brand']).strip() else ''}{r['device']} ({r['status']})", axis=1).tolist()
             sel = st.selectbox("Подробности:", opts, key=f"sel_{i}")
             
             selected_index = opts.index(sel)
             o_id = int(f_df.iloc[selected_index]['id'])
             o_det = f_df[f_df['id'] == o_id].iloc[0]
             
-            with st.container(border=True):
-                col_a, col_b = st.columns(2)
-                with col_a:
-                    st.write(f"### Заказ №{o_det['display_num']}")
-                    st.write(f"**Клиент:** {o_det['client']} | {o_det['phone']}")
-                    st.write(f"**Устройство:** {o_det['device']}")
-                    st.write(f"**Неисправность:** {o_det['issue']}")
-                    st.write(f"**Комплект:** {o_det['kit']} | **Вид:** {o_det['appearance']}")
-                with col_b:
-                    st.write(f"**Статус:** {o_det['status']}")
-                    st.write(f"**Стоимость:** {o_det['price']} руб. (Предоплата: {o_det['prepayment']})")
-                    st.write(f"**Мастер:** {o_det['master']}")
-                    
-                    sms_text = f"Здравствуйте, {o_det['client'].split()[1]}! Ваш {o_det['device']} готов. Сумма к оплате: {o_det['price']} BYN. Ждем вас в {IP_NAME}!"
-                    st.code(sms_text, language="text")
-                    st.caption("👆 Скопируйте текст выше и вставьте в СМС или мессенджер.")
-                
-                st.markdown("---")
-                n_stat = st.selectbox("Изменить статус:", ["Принят", "В работе", "Готов", "Выдан", "Отменён"], index=["Принят", "В работе", "Готов", "Выдан", "Отменён"].index(o_det['status']), key=f"n_stat_{o_id}_{i}")
-                
-                works_key = f"works_list_{o_id}"
-                if works_key not in st.session_state:
-                    st.session_state[works_key] = []
-                    if o_det.get('works_done'):
-                        for item in str(o_det['works_done']).split(';'):
-                            parts = item.split('|')
-                            if len(parts) >= 2:
-                                w_name = parts[0]
-                                try: w_price = float(parts[1])
-                                except: w_price = 0.0
-                                w_warranty = parts[2] if len(parts) > 2 else ""
-                                st.session_state[works_key].append({"name": w_name, "price": w_price, "warranty": w_warranty})
-                
-                if n_stat == "Выдан":
-                    st.markdown("**Выполненные работы:**")
-                    
-                    for idx, w in enumerate(st.session_state[works_key]):
-                        c_w1, c_w2, c_w3, c_w4 = st.columns([3, 1, 1, 0.5])
-                        new_name = c_w1.text_input(f"Работа {idx+1}", value=w['name'], key=f"wn_{o_id}_{idx}_{i}")
-                        new_price = c_w2.number_input(f"Сумма {idx+1}", min_value=0.0, step=10.0, value=w['price'], key=f"wp_{o_id}_{idx}_{i}")
-                        new_warranty = c_w3.text_input(f"Гар-тия {idx+1}", value=w.get('warranty', ''), key=f"ww_{o_id}_{idx}_{i}")
+            # Раскрывающийся блок
+            with st.expander(f"⬇️ Нажмите, чтобы развернуть/свернуть карточку заказа №{o_det['display_num']}", expanded=True):
+                col_main, _ = st.columns([0.7, 0.3]) 
+                with col_main:
+                    col_a, col_b = st.columns(2)
+                    with col_a:
+                        st.write(f"### Заказ №{o_det['display_num']}")
+                        st.write(f"**Клиент:** {o_det['client']} | {o_det['phone']}")
+                        st.write(f"**Устройство:** {o_det['brand']} {o_det['device']}")
+                        st.write(f"**Неисправность со слов клиента:** {o_det['issue']}")
+                        st.write(f"**Комплект:** {o_det['kit']} | **Вид:** {o_det['appearance']}")
+                    with col_b:
+                        st.write(f"**Статус:** {o_det['status']}")
+                        st.write(f"**Стоимость:** {o_det['price']} руб. (Предоплата: {o_det['prepayment']})")
+                        st.write(f"**Мастер:** {o_det['master']}")
                         
-                        st.session_state[works_key][idx] = {"name": new_name, "price": new_price, "warranty": new_warranty}
+                        sms_text = f"Здравствуйте, {o_det['client'].split()[0]}! Ваш {o_det['device']} готов. Сумма к оплате: {o_det['price']} BYN. Ждем вас в {IP_NAME}!"
+                        st.code(sms_text, language="text")
+                        st.caption("👆 Скопируйте текст выше и вставьте в СМС или мессенджер.")
+                    
+                    st.markdown("---")
+                    n_stat = st.selectbox("Изменить статус:", ["Принят", "В работе", "Готов", "Выдан", "Отменён"], index=["Принят", "В работе", "Готов", "Выдан", "Отменён"].index(o_det['status']), key=f"n_stat_{o_id}_{i}")
+                    
+                    works_key = f"works_list_{o_id}"
+                    if works_key not in st.session_state:
+                        st.session_state[works_key] = []
+                        if o_det.get('works_done'):
+                            for item in str(o_det['works_done']).split(';'):
+                                parts = item.split('|')
+                                if len(parts) >= 2:
+                                    w_name = parts[0]
+                                    try: w_price = float(parts[1])
+                                    except: w_price = 0.0
+                                    w_warranty = parts[2] if len(parts) > 2 else ""
+                                    st.session_state[works_key].append({"name": w_name, "price": w_price, "warranty": w_warranty})
+                    
+                    if n_stat == "Выдан":
+                        st.markdown("**Выполненные работы:**")
                         
-                        if c_w4.button("❌", key=f"delw_{o_id}_{idx}_{i}"):
-                            st.session_state[works_key].pop(idx)
+                        for idx, w in enumerate(st.session_state[works_key]):
+                            c_w1, c_w2, c_w3, c_w4 = st.columns([3, 1, 1, 0.5])
+                            new_name = c_w1.text_input(f"Работа {idx+1}", value=w['name'], key=f"wn_{o_id}_{idx}_{i}")
+                            new_price = c_w2.number_input(f"Сумма {idx+1}", min_value=0.0, step=10.0, value=w['price'], key=f"wp_{o_id}_{idx}_{i}")
+                            new_warranty = c_w3.text_input(f"Гар-тия {idx+1}", value=w.get('warranty', ''), key=f"ww_{o_id}_{idx}_{i}")
+                            
+                            st.session_state[works_key][idx] = {"name": new_name, "price": new_price, "warranty": new_warranty}
+                            
+                            if c_w4.button("❌", key=f"delw_{o_id}_{idx}_{i}"):
+                                st.session_state[works_key].pop(idx)
+                                st.rerun()
+
+                        if st.button("➕ Добавить еще работу", key=f"add_w_{o_id}_{i}"):
+                            st.session_state[works_key].append({"name": "", "price": 0.0, "warranty": ""})
                             st.rerun()
-
-                    if st.button("➕ Добавить еще работу", key=f"add_w_{o_id}_{i}"):
-                        st.session_state[works_key].append({"name": "", "price": 0.0, "warranty": ""})
-                        st.rerun()
+                            
+                        calculated_price = sum(w['price'] for w in st.session_state[works_key] if w['name'].strip())
                         
-                    calculated_price = sum(w['price'] for w in st.session_state[works_key] if w['name'].strip())
+                        st.markdown(f'<div class="total-box">Итоговая цена: {calculated_price:.2f} BYN</div>', unsafe_allow_html=True)
+                        n_price = calculated_price 
+                    else:
+                        n_price = st.number_input("Итоговая цена:", min_value=0.0, step=10.0, value=float(o_det['price']), key=f"pr_{o_id}_{i}")
                     
-                    st.markdown(f'<div class="total-box">Итоговая цена: {calculated_price:.2f} BYN</div>', unsafe_allow_html=True)
-                    n_price = calculated_price 
-                else:
-                    n_price = st.number_input("Итоговая цена:", min_value=0.0, step=10.0, value=float(o_det['price']), key=f"pr_{o_id}_{i}")
-                
-                if st.button("Сохранить изменения", type="primary", key=f"s_{o_id}_{i}"):
-                    works_str = ";".join([f"{w['name']}|{w['price']}|{w.get('warranty', '')}" for w in st.session_state[works_key] if w['name'].strip()])
+                    if st.button("Сохранить изменения", type="primary", key=f"s_{o_id}_{i}"):
+                        works_str = ";".join([f"{w['name']}|{w['price']}|{w.get('warranty', '')}" for w in st.session_state[works_key] if w['name'].strip()])
+                        
+                        now = datetime.now().isoformat()
+                        comp_at = now if n_stat == "Выдан" else o_det.get('completed_at', '')
+                        
+                        c.execute("UPDATE orders SET status=?, price=?, works_done=?, completed_at=?, updated_at=? WHERE id=?", 
+                                  (n_stat, n_price, works_str, comp_at, now, o_id))
+                        conn.commit()
+                        st.success("Сохранено!")
+                        st.rerun()
                     
-                    now = datetime.now().isoformat()
-                    comp_at = now if n_stat == "Выдан" else o_det.get('completed_at', '')
-                    
-                    c.execute("UPDATE orders SET status=?, price=?, works_done=?, completed_at=?, updated_at=? WHERE id=?", 
-                              (n_stat, n_price, works_str, comp_at, now, o_id))
-                    conn.commit()
-                    st.success("Сохранено!")
-                    st.rerun()
-                
-                o_dict = o_det.to_dict()
-                works_count = len([w for w in str(o_det.get('works_done', '')).split(';') if w.strip()])
-                o_dict['works_count'] = works_count if works_count > 0 else 1
+                    o_dict = o_det.to_dict()
+                    works_count = len([w for w in str(o_det.get('works_done', '')).split(';') if w.strip()])
+                    o_dict['works_count'] = works_count if works_count > 0 else 1
 
-                if o_det['status'] in ["Принят", "В работе"] and (tab_statuses[i] is None or tab_statuses[i] in [["Принят"], ["В работе"]]):
-                    st.markdown("### 🖨️ Документы (Приемка)")
-                    if st.button("🖨️ Печать квитанции о приеме", key=f"pr_rec_{o_id}_{i}", use_container_width=True, type="primary"):
-                        components.html(generate_document(o_dict, "receipt"), height=800, scrolling=True)
-                
-                elif o_det['status'] == "Выдан" and (tab_statuses[i] is None or tab_statuses[i] == ["Выдан"]):
-                    st.markdown("### 🖨️ Документы (Выдача)")
-                    cp1, cp2, cp3 = st.columns(3)
+                    if o_det['status'] in ["Принят", "В работе"] and (tab_statuses[i] is None or tab_statuses[i] in [["Принят"], ["В работе"]]):
+                        st.markdown("### 🖨️ Документы (Приемка)")
+                        if st.button("🖨️ Печать квитанции о приеме", key=f"pr_rec_{o_id}_{i}", use_container_width=True, type="primary"):
+                            components.html(generate_document(o_dict, "receipt"), height=800, scrolling=True)
                     
-                    with cp1:
-                        if st.button("Акт выполненных работ", key=f"pa_{o_id}_{i}", use_container_width=True):
-                            components.html(generate_document(o_dict, "act"), height=800, scrolling=True)
-                    with cp2:
-                        if st.button("Гарантийный талон", key=f"pw_{o_id}_{i}", use_container_width=True):
-                            components.html(generate_document(o_dict, "warranty"), height=800, scrolling=True)
-                    with cp3:
-                        if st.button("✂️ Печать комплекта", key=f"pboth_{o_id}_{i}", use_container_width=True, type="primary"):
-                            html_act = generate_document(o_dict, "act")
-                            html_warranty = generate_document(o_dict, "warranty")
-                            html_act = html_act.replace("<script>window.print();</script>", "")
-                            cut_line = """<div style="text-align: center; margin: 20px 0; position: relative; page-break-inside: avoid;"><div style="border-top: 1px dashed #000; width: 100%; position: absolute; top: 50%; z-index: 1;"></div><span style="background: #fff; padding: 0 10px; position: relative; z-index: 2; font-size: 16px;">✂️</span></div>"""
-                
-                st.markdown("---")
-                if st.button("❌ Удалить заказ", type="secondary", key=f"d_{o_id}_{i}", use_container_width=True):
-                    c.execute("DELETE FROM orders WHERE id = ?", (o_id,))
-                    conn.commit()
-                    st.success("Удалено")
-                    st.rerun()
+                    elif o_det['status'] == "Выдан" and (tab_statuses[i] is None or tab_statuses[i] == ["Выдан"]):
+                        st.markdown("### 🖨️ Документы (Выдача)")
+                        cp1, cp2, cp3 = st.columns(3)
+                        
+                        with cp1:
+                            if st.button("Акт выполненных работ", key=f"pa_{o_id}_{i}", use_container_width=True):
+                                components.html(generate_document(o_dict, "act"), height=800, scrolling=True)
+                        with cp2:
+                            if st.button("Гарантийный талон", key=f"pw_{o_id}_{i}", use_container_width=True):
+                                components.html(generate_document(o_dict, "warranty"), height=800, scrolling=True)
+                        with cp3:
+                            if st.button("✂️ Печать комплекта", key=f"pboth_{o_id}_{i}", use_container_width=True, type="primary"):
+                                html_act = generate_document(o_dict, "act")
+                                html_warranty = generate_document(o_dict, "warranty")
+                                
+                                html_act = html_act.replace("<script>window.print();</script>", "")
+                                
+                                cut_line = """<div style="text-align: center; margin: 20px 0; position: relative; page-break-inside: avoid;"><div style="border-top: 1px dashed #000; width: 100%; position: absolute; top: 50%; z-index: 1;"></div><span style="background: #fff; padding: 0 10px; position: relative; z-index: 2; font-size: 16px;">✂️</span></div>"""
+                                
+                                combined_html = html_act.replace("</body></html>", cut_line + html_warranty)
+                                components.html(combined_html, height=1400, scrolling=True)
+                    
+                    st.markdown("---")
+                    if st.button("❌ Удалить заказ", type="secondary", key=f"d_{o_id}_{i}", use_container_width=True):
+                        c.execute("DELETE FROM orders WHERE id = ?", (o_id,))
+                        conn.commit()
+                        st.success("Удалено")
+                        st.rerun()
 
 # --- КЛИЕНТЫ ---
 elif menu == "Клиенты":
     st.subheader("Клиенты")
     df_c = pd.read_sql_query("SELECT * FROM clients", conn)
-    if df_c.empty: st.info("Нет клиентов")
+    
+    if df_c.empty: 
+        st.info("Нет клиентов")
     else:
+        # Красивая таблица
         display_clients = df_c.copy()
         display_clients.insert(0, '№', range(1, len(display_clients) + 1))
-        display_clients = display_clients.rename(columns={'surname': 'Фамилия', 'name': 'Имя', 'phone': 'Тел', 'notes': 'Заметки'})
+        display_clients = display_clients.rename(columns={'surname': 'Фамилия', 'name': 'Имя', 'phone': 'Телефон', 'notes': 'Заметки'})
         st.dataframe(display_clients[['№', 'Фамилия', 'Имя', 'Тел', 'Заметки']], use_container_width=True, hide_index=True)
         
         st.divider()
-        opts = {f"{r['surname']} {r['name']} ({r['phone']})": r['id'] for r in df_c.to_dict('records')}
-        sel = st.selectbox("Удалить клиента:", list(opts.keys()))
-        if st.button("Удалить", type="primary"):
-            if pd.read_sql_query(f"SELECT COUNT(*) as c FROM orders WHERE client_id={opts[sel]}", conn).iloc[0]['c'] > 0:
-                st.error("У клиента есть заказы!")
-            else:
-                c.execute("DELETE FROM clients WHERE id=?", (opts[sel],))
-                conn.commit()
-                st.success("Удален")
-                st.rerun()
+        
+        # Блок редактирования
+        st.subheader("✏️ Редактировать или удалить клиента")
+        
+        # Создаем словарь для выбора (Фамилия Имя - Телефон)
+        opts = {f"{(str(r['surname']) + ' ') if pd.notna(r['surname']) and str(r['surname']).strip() else ''}{r['name']} ({r['phone']})": r['id'] for r in df_c.to_dict('records')}
+        sel = st.selectbox("Выберите клиента:", list(opts.keys()))
+        client_id = opts[sel]
+        
+        # Получаем текущие данные выбранного клиента
+        client_data = df_c[df_c['id'] == client_id].iloc[0]
+        
+        # Форма редактирования
+        col1, col2 = st.columns(2)
+        with col1:
+            new_surname = st.text_input("Фамилия", value=client_data['surname'])
+        with col2:
+            new_name = st.text_input("Имя", value=client_data['name'])
+            
+        # Телефон с маской
+        st.write("Телефон (введите 9 цифр):")
+        col_code, col_phone = st.columns([1, 4])
+        with col_code:
+            st.text_input("Код", value="+375", disabled=True, key="edit_code", label_visibility="collapsed")
+        with col_phone:
+            current_digits = ''.join(filter(str.isdigit, client_data['phone']))[-9:] if client_data['phone'] else ""
+            new_phone_raw = st.text_input("Номер", value=current_digits, key="edit_phone", label_visibility="collapsed")
+            
+        new_notes = st.text_area("Заметки", value=client_data['notes'] if client_data['notes'] else "")
+        
+        # Кнопки действий
+        col_save, col_del = st.columns(2)
+        with col_save:
+            if st.button("💾 Сохранить изменения", type="primary", use_container_width=True):
+                if not new_name or not new_phone_raw:
+                    st.error("Заполните ФИО и телефон!")
+                else:
+                    digits = ''.join(filter(str.isdigit, new_phone_raw))
+                    f_phone = f"+375 ({digits[:2]}) {digits[2:5]} {digits[5:7]} {digits[7:9]}" if len(digits) == 9 else f"+375 {new_phone_raw}"
+                    
+                    c.execute("UPDATE clients SET surname=?, name=?, phone=?, notes=? WHERE id=?", 
+                              (new_surname, new_name, f_phone, new_notes, client_id))
+                    conn.commit()
+                    st.success("Данные клиента обновлены!")
+                    st.rerun()
+                    
+        with col_del:
+            if st.button("❌ Удалить клиента", type="secondary", use_container_width=True):
+                # Проверяем, есть ли у клиента заказы
+                if pd.read_sql_query(f"SELECT COUNT(*) as c FROM orders WHERE client_id={client_id}", conn).iloc[0]['c'] > 0:
+                    st.error("У клиента есть заказы! Удаление невозможно.")
+                else:
+                    c.execute("DELETE FROM clients WHERE id=?", (client_id,))
+                    conn.commit()
+                    st.success("Клиент удален")
+                    st.rerun()
 
 # --- СТАТИСТИКА ---
 elif menu == "Статистика":
