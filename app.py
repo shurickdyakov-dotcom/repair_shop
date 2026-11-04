@@ -19,33 +19,32 @@ st.markdown("""
     html, body, [class*="css"] { font-family: 'Segoe UI', Roboto, sans-serif; }
     [data-testid="stSidebar"] { background-color: #1E293B; }
     [data-testid="stSidebar"] * { color: #F8FAFC !important; }
-    .stButton>button { border-radius: 8px; font-weight: 500; transition: all 0.2s; }
+    
+    .stButton>button { border-radius: 8px; font-weight: 500; transition: all 0.2s; font-size: 12px !important; padding: 4px 10px !important; }
     .stButton>button:hover { transform: translateY(-2px); box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    
     div[data-testid="metric-container"] { background-color: #ffffff; border: 1px solid #E2E8F0; padding: 15px; border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
     div[data-testid="stVerticalBlockBorderWrapper"] { border-radius: 12px; border: 1px solid #E2E8F0; box-shadow: 0 2px 8px rgba(0,0,0,0.04); background-color: #FAFAFA; }
     .total-box { background-color: #ecfdf5; border: 1px solid #10b981; padding: 15px; border-radius: 8px; color: #065f46; font-weight: bold; font-size: 18px; text-align: right; margin-top: 10px; }
-    /* Уменьшаем отступы между колонками в форме */
-    [data-testid="stHorizontalBlock"] {
-        gap: 1rem !important;
-    }
     
-    /* Делаем чекбоксы компактнее */
-    [data-testid="stCheckbox"] {
-        margin-bottom: -10px;
-.block-container {
-        padding-top: 2rem !important;
-        padding-bottom: 2rem !important;
-        .block-container, .block-container table, .block-container div[data-testid="stDataFrame"] {
-        font-size: 8px !important;
-    }
-    }
-.block-container {
-        max-width: 1100px !important;
+    /* Уменьшаем шрифты */
+    h1 { font-size: 20px !important; margin-bottom: 5px !important; }
+    h2 { font-size: 16px !important; margin-bottom: 5px !important; }
+    h3 { font-size: 14px !important; margin-bottom: 5px !important; }
+    p, li, label { font-size: 12px !important; margin-bottom: 2px !important; }
+    
+    /* Компактные отступы */
+    [data-testid="stHorizontalBlock"] { gap: 1rem !important; }
+    [data-testid="stCheckbox"] { margin-bottom: -10px; }
+    [data-testid="stVerticalBlock"] > div { gap: 0.5rem !important; }
+    [data-testid="stTextInput"] input, [data-testid="stTextArea"] textarea, [data-testid="stSelectbox"] { font-size: 12px !important; min-height: 30px !important; }
+    
+    /* Ограничиваем ширину страницы */
+    .block-container {
+        max-width: 900px !important;
         margin: 0 auto !important;
-        padding-top: 2rem !important;
-    }
-    div[data-testid="stDataFrame"] {
-        width: 100% !important;
+        padding-top: 1rem !important;
+        padding-bottom: 1rem !important;
     }
 </style>
 """, unsafe_allow_html=True)
