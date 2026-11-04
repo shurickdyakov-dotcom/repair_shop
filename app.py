@@ -46,6 +46,21 @@ st.markdown("""
         padding-top: 1rem !important;
         padding-bottom: 1rem !important;
     }
+        /* Разрешаем таблицам быть шире основного контейнера */
+    div[data-testid="stDataFrame"] {
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+    
+    /* Принудительно растягиваем саму таблицу внутри */
+    div[data-testid="stDataFrame"] > div {
+        width: 950px !important;
+        min-width: 950px !important;
+    }
+    /* Ограничиваем ширину выпадающих списков (selectbox) */
+    div[data-testid="stSelectbox"] {
+        max-width: 300px !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -257,7 +272,7 @@ if 'menu_choice' not in st.session_state: st.session_state.menu_choice = "Зак
 def go_to_add_order(): st.session_state.menu_choice = "Добавить заказ"
 
 st.sidebar.title("📱 Ремонт CRM")
-menu = st.sidebar.radio("Навигация", ["Заказы", "Клиенты", "Добавить заказ", "Статистика"], key="menu_choice")
+menu = st.sidebar.radio("Навигация", ["Заказы", "Клиенты", "Добавить заказ"], key="menu_choice")
 st.sidebar.divider()
 with open("repair_shop.db", "rb") as f:
     st.sidebar.download_button(
@@ -624,18 +639,3 @@ elif menu == "Клиенты":
                     conn.commit()
                     st.success("Клиент удален")
                     st.rerun()
-
-# --- СТАТИСТИКА ---
-elif menu == "Статистика":
-    st.subheader("Дашборд")
-    tot = pd.read_sql_query("SELECT COUNT(*) as c FROM orders", conn).iloc[0]['c']
-    rev = pd.read_sql_query("SELECT SUM(price) as s FROM orders WHERE status='Выдан'", conn).iloc[0]['s'] or 0
-    opn = pd.read_sql_query("SELECT COUNT(*) as c FROM orders WHERE status IN ('Принят','В работе','Готов')", conn).iloc[0]['c']
-    
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Всего заказов", tot)
-    c2.metric("Выручка", f"{rev:.2f} BYN")
-    c3.metric("В работе", opn)
-    
-    st.markdown("### Последние заказы")
-    st.dataframe(pd.read_sql_query("SELECT o.display_num as '№', c.surname || ' ' || c.name as 'Клиент', o.device as 'Устройство', o.status as 'Статус', o.price as 'Сумма' FROM orders o JOIN clients c ON o.client_id = c.id ORDER BY o.display_num DESC LIMIT 5", conn), use_container_width=True, hide_index=True)
