@@ -211,7 +211,7 @@ def generate_document(order, type_doc):
         <div style="border: 1px solid #000; padding: 8px; margin-bottom: 10px;">
             <div style="margin-bottom: 3px;"><b>Заявленная неисправность:</b> {order['issue']}</div>
             <div style="margin-bottom: 3px;"><b>Комплектация:</b> {order['kit']}</div>
-            <div><b>Внешний вид:</b> {order['appearance']}</div>
+            <div><b>Состояние устройства:</b> {order['appearance']}</div>
         </div>
         
         <div class="totals">
