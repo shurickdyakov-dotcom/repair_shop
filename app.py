@@ -109,12 +109,12 @@ def generate_receipt(order):
     </body></html>"""
     return html
     def generate_document(order, type_doc):
-    if order.get('completed_at'):
-        order_date = pd.to_datetime(order['completed_at']).strftime('%d.%m.%Y')
-    else:
-        order_date = datetime.now().strftime('%d.%m.%Y')
+        if order.get('completed_at'):
+            order_date = pd.to_datetime(order['completed_at']).strftime('%d.%m.%Y')
+        else:
+            order_date = datetime.now().strftime('%d.%m.%Y')
     
-    if type_doc == "act":
+        if type_doc == "act":
         title = "Акт сдачи-приемки выполненных работ (оказанных услуг)"
         bottom_text = f"""
         <div style="margin-top: 10px; font-size: 12px;">
