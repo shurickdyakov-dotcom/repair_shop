@@ -211,7 +211,7 @@ def generate_document(order, type_doc):
         <div style="border: 1px solid #000; padding: 8px; margin-bottom: 10px;">
             <div style="margin-bottom: 3px;"><b>Заявленная неисправность:</b> {order['issue']}</div>
             <div style="margin-bottom: 3px;"><b>Комплектация:</b> {order['kit']}</div>
-            <div><b>Состояние устройства:</b> {order['appearance']}</div>
+            <div><b>Состояние устройства:</b> {order['inspection']}</div>
         </div>
         
         <div class="totals">
@@ -394,7 +394,7 @@ if menu == "Добавить заказ":
             if s_scratch: insp_list.append("Царапины")
             if s_other: insp_list.append(s_other)
             c.execute("INSERT INTO orders (display_num, client_id, brand, device, issue, kit, appearance, inspection, prepayment, payment_method, master, status, price, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                      (new_display_num, client_id, brand, device, issue, kit_s, "не указан", insp_str, prepay, p_method, master, 'Принят', price, now, now))
+                      (new_display_num, client_id, brand, device, issue, kit_s, insp_str, prepay, p_method, master, 'Принят', price, now, now))
             conn.commit()
             st.success(f"Заказ №{new_display_num} успешно создан!")
 
