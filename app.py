@@ -243,7 +243,7 @@ def generate_document(order, type_doc):
         </ol></div>
             """
         
-            html += f"""
+        html += f"""
                 <div class="signatures">
                 <div>Исполнитель: <span class="sig-line"></span> / {IP_UNP.replace('ИП ', '')} /</div>
                 <div><span class="sig-line"></span> / Заказчик /</div>
