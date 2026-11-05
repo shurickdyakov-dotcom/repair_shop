@@ -202,7 +202,6 @@ def generate_document(order, type_doc):
                 <div class="info-row"><span class="info-label">Заказчик:</span> {order['client']}</div>
                 <div class="info-row"><span class="info-label">Телефон:</span> {order['phone']}</div>
                 <div class="info-row"><span class="info-label">Марка/модель:</span> {order.get('brand', '')} {order['device']}</div>
-                <div class="info-row"><span class="info-label">Состояние:</span> {order.get('appearance', 'Не указано')}. {order.get('issue', '')}</div>
             </div>
         </div>
     """
