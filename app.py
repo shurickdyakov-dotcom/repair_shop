@@ -241,8 +241,9 @@ def generate_document(order, type_doc):
             <li>Устройство принимается на гарантийное обслуживание только при предъявлении данного талона. Срок гарантийного ремонта составляет до 14 рабочих дней.</li>
             <li>С условиями гарантии ознакомлен и согласен.</li>
         </ol></div>
+            """
         
-        html += f"""
+            html += f"""
                 <div class="signatures">
                 <div>Исполнитель: <span class="sig-line"></span> / {IP_UNP.replace('ИП ', '')} /</div>
                 <div><span class="sig-line"></span> / Заказчик /</div>
