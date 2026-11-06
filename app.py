@@ -388,18 +388,29 @@ if menu == "Добавить заказ":
             
             # --- СОХРАНЯЕМ ЗАКАЗ ---
             now = datetime.now().isoformat()
-            insp_list = []
-            if s_crack: insp_list.append("Разбит дисплей")
-            if s_matrix: insp_list.append("Повреждена матрица")
-            if s_case: insp_list.append("Кривой корпус")
-            if s_nopower: insp_list.append("Не включается")
-            if s_noimage: insp_list.append("Нет изображения")
-            if s_water: insp_list.append("Следы влаги")
-            if s_scratch: insp_list.append("Царапины")
-            if s_other: insp_list.append(s_other)
-            c.execute("INSERT INTO orders (display_num, client_id, brand, device, issue, kit, appearance, inspection, prepayment, payment_method, master, status, price, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                      (new_display_num, client_id, brand, device, issue, kit_s, ", ".join(state_list), prepay, p_method, master, 'Принят', price, now, now))
-            conn.commit()
+            
+            # СБОР СОСТОЯНИЯ УСТРОЙСТВА
+            state_list = []
+            if s_case: state_list.append("Кривой корпус")
+            if s_power: state_list.append("Не включается")
+            if s_noimage: state_list.append("Нет изображения")
+            if s_water: state_list.append("Следы влаги")
+            if s_crack: state_list.append("Разбит дисплей")
+            if s_matrix: state_list.append("Повреждена матрица")
+            if s_scratch: state_list.append("Царапины")
+            if s_other and s_other_text: state_list.append(s_other_text)
+            
+            appearance_str = ", ".join(state_list) if state_list else "Не указан"
+            
+            # Собираем комплектацию (если она еще не собрана выше)
+            # (если kit_s уже собирается выше по коду, эту строчку можно удалить)
+            
+            # Сохраняем заказ (ровно 14 знаков вопроса и 14 переменных)
+            c.execute("""INSERT INTO orders 
+                         (display_num, client_id, brand, device, issue, kit, appearance, prepayment, payment_method, master, status, price, created_at, updated_at) 
+                         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                      (new_display_num, client_id, brand, device, issue, kit_s, appearance_str, prepay, p_method, master, 'Принят', price, now, now))
+            
             st.success(f"Заказ №{new_display_num} успешно создан!")
 
 # --- СПИСОК ЗАКАЗОВ ---
