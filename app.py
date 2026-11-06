@@ -87,6 +87,7 @@ if 'brand' not in columns: c.execute("ALTER TABLE orders ADD COLUMN brand TEXT D
 if 'inspection' not in columns: c.execute("ALTER TABLE orders ADD COLUMN inspection TEXT DEFAULT ''")
 if 'warranty' not in columns: c.execute("ALTER TABLE orders ADD COLUMN warranty TEXT DEFAULT ''")
 if 'completed_at' not in columns: c.execute("ALTER TABLE orders ADD COLUMN completed_at TEXT DEFAULT ''")
+if 'brand' not in columns: c.execute("ALTER TABLE orders ADD COLUMN brand TEXT DEFAULT ''")
 if 'display_num' not in columns: 
     c.execute("ALTER TABLE orders ADD COLUMN display_num INTEGER DEFAULT 0")
     c.execute("SELECT id FROM orders ORDER BY created_at ASC")
